@@ -10,6 +10,7 @@ from panda3d.core import Texture, TransparencyAttrib, TextureStage
 from math import sin, cos, radians
 from panda3d.core import NodePath
 from direct.gui.DirectGui import DirectScrolledFrame
+import os
 
 
 
@@ -31,10 +32,25 @@ class MyApp(ShowBase):
        # self.trackball.node().setPos(500, 500, -100)
         self.disableMouse() 
 
-        self.brick_types = {
-            "brick1": "/Users/jonathan/Documents/2439.obj",
-            "brick2": "/Users/jonathan/Documents/99010.obj",
-        }
+
+
+        brick_geom_folder_path = '/Users/jonathan/Documents/Resources/brick_geom'  # Replace with the actual folder path
+
+        brick_files = [
+            os.path.join(brick_geom_folder_path, file)
+            for file in os.listdir(brick_geom_folder_path)
+            if os.path.isfile(os.path.join(brick_geom_folder_path, file)) and file != '.DS_Store'
+        ]
+
+        bricks = {}
+        for i, brick_file in enumerate(brick_files, start=1):
+            bricks[f'brick{i}'] = brick_file
+
+      #  self.brick_types = {
+       #     "brick1": "/Users/jonathan/Documents/Resources/2439.obj",
+        #    "brick2": "/Users/jonathan/Documents/Resources/99010.obj",
+         #   "brick3": "/Users/jonathan/Documents/Resources/98729.obj",
+        #}
 
         # Create a plane at z=0
         self.plane = Plane(Vec3(0, 0, 1), Point3(0, 0, 0))
@@ -340,30 +356,40 @@ class MyApp(ShowBase):
             scrollBarWidth=0.04,
             verticalScroll_relief=DGG.SUNKEN,
         )
-        brick1_image = "/Users/jonathan/Documents/Resources/2439.png"  # Replace with the actual path to your image
-        brick2_image = "/Users/jonathan/Documents/Resources/99010.png"
 
 
-        # Create the first button
-        self.button1 = DirectButton(
-            parent=self.frame.getCanvas(),
-            image=brick1_image, 
-            pos=(0, 0, 0),  # Adjust as necessary
-            scale=0.1,  # Adjust as necessary
-            command=self.set_brick_type,
-            extraArgs=["brick1"],
-        )
 
-        # Create the second button
-        self.button2 = DirectButton(
-            parent=self.frame.getCanvas(),
-            image=brick2_image, 
-            pos=(0, 0, -0.2),  # Adjust as necessary
-            scale=0.1,  # Adjust as necessary
-            command=self.set_brick_type,
-            extraArgs=["brick2"],
+        brick_images_folder_path = '/Users/jonathan/Documents/Resources/brick_images'  # Replace with the actual folder path
+
+        brick_images_file_paths = tuple(
+            os.path.join(brick_images_folder_path, file)
+            for file in os.listdir(brick_images_folder_path)
+            if os.path.isfile(os.path.join(brick_images_folder_path, file)) and file != '.DS_Store'
         )
         
+        brick_images = [
+        #    "/Users/jonathan/Documents/Resources/2439.png",
+         #   "/Users/jonathan/Documents/Resources/99010.png",
+          #  "/Users/jonathan/Documents/Resources/98729.png",
+            
+        ]
+
+        num_bricks = len(brick_images_file_paths)
+        
+        for i in range(num_bricks):
+            brick_image = brick_images_file_paths[i]
+            bricknum = i + 1
+
+            brick_button_pos = (-0.17, 0, 2.85 - i * 0.25)
+
+            self.brick_button = DirectButton(
+                parent=self.frame.getCanvas(),
+                image=brick_image, 
+                pos=brick_button_pos,  # Adjust as necessary
+                scale=0.1,  # Adjust as necessary
+                command=self.set_brick_type,
+                extraArgs=["brick"+str(bricknum)],
+            )
 
         self.taskMgr.add(self.update_model_position, "update_model_position")
 
