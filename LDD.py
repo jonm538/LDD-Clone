@@ -9,6 +9,8 @@ from panda3d.core import TextureStage
 from panda3d.core import Texture, TransparencyAttrib, TextureStage
 from math import sin, cos, radians
 from panda3d.core import NodePath
+from direct.gui.DirectGui import DirectScrolledFrame
+
 
 
 
@@ -92,6 +94,7 @@ class MyApp(ShowBase):
         self.accept('c', self.clone_selected)
         self.accept('wheel_up', self.zoom_in)
         self.accept('wheel_down', self.zoom_out)
+        
 
 
         self.accept('arrow_left', self.move_camera, [-30, 0, 0])
@@ -328,32 +331,39 @@ class MyApp(ShowBase):
 
 
     def create_gui(self):
-        panel = DirectFrame(
-            frameSize=(-0.8, 0.2, -2, 1),
-            frameColor=(0.2, 0.2, 0.2, 0.8),
-            pos=(-1, 0, 0.7)
+        # Create the scrolled frame
+        self.frame = DirectScrolledFrame(
+            parent=self.aspect2d,
+            pos=(-1, 0, 0),  # Adjust as necessary
+            frameSize=(-0.3, 0.3, -1, 1),  # Adjust as necessary
+            canvasSize=(-0.3, 0.3, -3, 3),  # Adjust as necessary
+            scrollBarWidth=0.04,
+            verticalScroll_relief=DGG.SUNKEN,
         )
-
         brick1_image = "/Users/jonathan/Documents/Resources/2439.png"  # Replace with the actual path to your image
         brick2_image = "/Users/jonathan/Documents/Resources/99010.png"
 
-        brick1_button = DirectButton(
-            image=brick1_image,  # Use the image parameter instead of text
-            scale=0.2,
+
+        # Create the first button
+        self.button1 = DirectButton(
+            parent=self.frame.getCanvas(),
+            image=brick1_image, 
+            pos=(0, 0, 0),  # Adjust as necessary
+            scale=0.1,  # Adjust as necessary
             command=self.set_brick_type,
             extraArgs=["brick1"],
-            pos=(-0.1, 0, 0),
-            parent=panel
         )
 
-        brick2_button = DirectButton(
-            image=brick2_image,
-            scale=0.2,
+        # Create the second button
+        self.button2 = DirectButton(
+            parent=self.frame.getCanvas(),
+            image=brick2_image, 
+            pos=(0, 0, -0.2),  # Adjust as necessary
+            scale=0.1,  # Adjust as necessary
             command=self.set_brick_type,
             extraArgs=["brick2"],
-            pos=(-0.1, 0, -0.8),
-            parent=panel
         )
+        
 
         self.taskMgr.add(self.update_model_position, "update_model_position")
 
