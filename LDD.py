@@ -1,3 +1,4 @@
+from panda3d.core import CollisionHandlerPusher
 from panda3d.core import Plane, PlaneNode, Vec3, Point3
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import CardMaker
@@ -19,9 +20,9 @@ from panda3d.core import BitMask32
 from panda3d.core import LPoint2f
 import xml.etree.ElementTree as ET
 import math
-
-
-
+from panda3d.core import WindowProperties
+import collections
+from panda3d.core import PointLight
 
 
 
@@ -31,6 +32,8 @@ def hex_to_rgb(hex):
     b = int(hex[5:7], 16)
     return r/255, g/255, b/255, 1 # Normalize to 0-1 range and return as RGBA
 class MyApp(ShowBase):
+
+    
     def __init__(self):
         ShowBase.__init__(self)
         # self.disableMouse()
@@ -39,25 +42,30 @@ class MyApp(ShowBase):
         self.camera.setPos(764, -650, 890)
         self.camera.setHpr(30, -30, 0)
 
-
         # Reset trackball position
         self.disableMouse() 
 
+        
+        plight = PointLight("plight")
+        plight.setColor((1,1,1,1))
+        self.plnp = self.render.attachNewNode(plight)
+        self.render.setLight(self.plnp)
+        self.plnp.setPos (764, -650, 890)
 
 
-        brick_geom_folder_path = '/Users/jonathan/Documents/Resources/brick_geom'  # Replace with the actual folder path
+        self.brick_geom_folder_path = '/Users/jonathan/Documents/Resources/brick_geometry'  # Replace with the actual folder path
 
-        brick_files = [
-            os.path.join(brick_geom_folder_path, file)
-            for file in os.listdir(brick_geom_folder_path)
-            if os.path.isfile(os.path.join(brick_geom_folder_path, file)) and file != '.DS_Store'
+        self.brick_files = [
+            os.path.join(self.brick_geom_folder_path, file)
+            for file in os.listdir(self.brick_geom_folder_path)
+            if os.path.isfile(os.path.join(self.brick_geom_folder_path, file)) and file != '.DS_Store'
         ]
         
-        brick_files = sorted(brick_files)
+        self.brick_files = sorted(self.brick_files)
 
 
         self.brick_types = {}
-        for i, brick_file in enumerate(brick_files, start=1):
+        for i, brick_file in enumerate(self.brick_files, start=1):
             self.brick_types[f'brick{i}'] = brick_file
 
         # Create a plane at z=0
@@ -145,7 +153,7 @@ class MyApp(ShowBase):
         # Add the picker_node_path to the CollisionTraverser
         self.picker.addCollider(self.picker_node_path, self.pq)
 
-        self.mode = 'PLACE'  # Set default mode to 'PLACE'
+       # self.mode = 'PLACE'  # Set default mode to 'PLACE'
 
         self.selectMove = False
 
@@ -185,6 +193,7 @@ class MyApp(ShowBase):
         
         # Initialize button dictionaries
         self.brick_buttons = {}
+        self.cat_buttons = {}
 
         # Initialize slot positions
         self.category_slot = 1
@@ -197,6 +206,7 @@ class MyApp(ShowBase):
         #self.accept('wheel_down', self.scroll_down)
         #self.frame.bind(DGG.ENTER, self.on_mouse_enter_frame)
         #self.frame.bind(DGG.EXIT, self.on_mouse_exit_frame)
+        self.mode = None
 
     def on_mouse_enter_frame(self, event):
         self.mouse_on_frame = True
@@ -303,7 +313,7 @@ class MyApp(ShowBase):
         # Move the camera by the specified amount
         self.camera.setPos(self.camera.getPos() + Vec3(dx, dy, dz))
         cameraloc = self.camera.getPos()
-        print(cameraloc)
+        #print(cameraloc)
 
 
     def create_navigation_buttons(self):
@@ -442,6 +452,7 @@ class MyApp(ShowBase):
             #button.bind(DGG.ENTER, lambda _: on_enter())
                 button.bind(DGG.EXIT, lambda _: on_exit())
 
+
     def create_color_tooltip(color, pos):
         text = f"R:{color[0]:.2f}, G:{color[1]:.2f}, B:{color[2]:.2f}"
         return DirectLabel(
@@ -452,8 +463,9 @@ class MyApp(ShowBase):
             frameColor=(1, 1, 1, 1),
         )
     def set_color(self, color):
-        print("set color")
+        ###print("set color")
         self.selected_color = color
+        print(self.selected_color)
 
     def toggle_color_selection_window(self):
         print("making colors")
@@ -465,7 +477,7 @@ class MyApp(ShowBase):
     def clone_selected(self):
         if self.selected and self.hovered_brick is not None:  # Check if a brick is selected
             # Create a new copy of the hovered_brick
-            print(self.hovered_brick.getPos())
+            #print(self.hovered_brick.getPos())
             cloned_brick = self.hovered_brick.copyTo(self.render)
 
             cloned_brick.setPos(self.hovered_brick.getPos() + Vec3(0, 0, 2))
@@ -518,14 +530,12 @@ class MyApp(ShowBase):
         return task.cont
 
     def check_mouse(self, task):
-        #print(self.selected_color)
+       # print(self.selected)
+       # print(self.hovered_brick, self.picked_obj, self.mode, self.locked)
         if self.mouseWatcherNode.hasMouse():
             mousewatch = True
-            #print("hovered",self.hovered_brick)
-            #print("picked",self.picked_obj)
             pass
         else:
-           # print("lost your mouse")
             mousewatch = False
             self.picked_obj = None
             self.hovered_brick = None
@@ -543,11 +553,8 @@ class MyApp(ShowBase):
             pos3d = Point3()
             if self.plane.intersectsLine(pos3d, near_world, far_world):
                 # If a brick is selected, update its position
-                if not self.locked and self.selected and self.hovered_brick is not None and not self.selectMove: #if a brick is NOT locked but IS selected
-                    print("near world:",near_world)
-                    print("far world:",far_world)
-                    print("pos3d",pos3d)
-                    print("brick position:",self.hovered_brick.getPos())
+                #if not self.locked and self.selected and self.hovered_brick is not None and not self.selectMove: #if a brick is NOT locked but IS selected
+                 #   return
                     # the new position will be pos3d + Vec3(0, 0, 1)
                     #new_pos = pos3d + Vec3(0, 0, 1)
                     #new_pos.x = round(new_pos.x / 5) * 5
@@ -566,7 +573,7 @@ class MyApp(ShowBase):
                     #self.hovered_brick.setZ(self.hovered_brick.getZ() + delta_z)
                     
 
-                elif self.model is None:
+                if self.model is None:
                     self.load_model(pos3d)
 
                 elif not self.locked and not self.selected and not self.selectMove:
@@ -591,6 +598,7 @@ class MyApp(ShowBase):
         
             self.picker.traverse(self.render)
             if self.pq.getNumEntries() > 0:
+                print("got")
                 self.pq.sortEntries()
                 self.picked_obj = self.pq.getEntry(0).getIntoNodePath()
                 if self.picked_obj != self.hovered_brick:
@@ -598,19 +606,39 @@ class MyApp(ShowBase):
                         self.hovered_brick.setColorScale(1, 1, 1, 1)
                     self.picked_obj.setColorScale(0.5, 0, 0.5, 1) #purple
                     self.hovered_brick = self.picked_obj
-                    print(self.hovered_brick)
-                    print(self.picked_obj)
-                    print("Hovered over: ", self.picked_obj.getName())
+                    print("Hovered over: ", self.picked_obj)
                     self.hoveringOver = True
                     print(self.hoveringOver)
             else:
+                #self.hovered_brick = None
                 if self.hovered_brick is not None and not self.selected and self.mouseWatcherNode.hasMouse():
                     self.hovered_brick.setColorScale(1, 1, 1, 1) #white
-                    self.hovered_brick = None
+                    #self.hovered_brick = None
                     
             
 
             return task.cont
+        
+    def create_bounding_box(self, node):
+        bounds = node.getTightBounds()
+        min_bound, max_bound = bounds
+
+        # Calculate dimensions
+        x_dim = max_bound.getX() - min_bound.getX()
+        y_dim = max_bound.getY() - min_bound.getY()
+        z_dim = max_bound.getZ() - min_bound.getZ()
+
+        # Load a cube model
+        bounding_box = loader.loadModel("/Users/jonathan/Documents/Resources/other/boundingboxcube.obj")
+        bounding_box.reparentTo(node)
+
+        # Scale and position the box
+        bounding_box.setScale(x_dim, y_dim, z_dim)
+        bounding_box.setPos((min_bound + max_bound) / 2)
+        bounding_box.setColor(0.5, 0, 0.5, 1) # purple
+        bounding_box.setTransparency(TransparencyAttrib.MAlpha) # semi-transparent
+
+        return bounding_box
 
     def on_left_click(self):
         if self.mode == 'PLACE':
@@ -625,7 +653,7 @@ class MyApp(ShowBase):
         elif self.mode == 'SELECT':
             if self.hovered_brick is not None:
                 if not self.selected:
-                    print("moving!")
+                    ###print("moving!")
                     self.selected = True
                     # Change the color of the children nodes
                     self.hovered_brick.setColorScale(0, 0, 1, 1)
@@ -634,8 +662,22 @@ class MyApp(ShowBase):
                     print("deselected")
                     self.selected = False
                     # Revert the color of the children nodes
-                    for child in self.hovered_brick.getChildren():
-                        child.setColorScale(1, 1, 1, 1)  # Revert to original color
+                    self.picked_obj.setColorScale(1,1,1,1)
+                    self.hovered_brick = None
+                    self.picked_obj = None
+                    self.mode = None
+        elif self.mode == 'DELETE':
+            self.delete_brick(self.picked_obj)
+
+
+  
+    def delete_brick(self, brick):
+            if self.picked_obj is not None and self.hovered_brick == self.picked_obj:
+                    if self.picked_obj in self.placed_bricks:
+                        self.placed_bricks.remove(self.picked_obj)
+                    self.picked_obj.removeNode()  # Remove the selected object
+                    self.picked_obj = None  # Clear the reference
+                                
                         
     def clamp_position(self, pos):
         x = max(0, min(pos.x, 600))
@@ -644,7 +686,7 @@ class MyApp(ShowBase):
         return Point3(x, y, z)
 
     def get_category_id(self, brick_name):
-        xml_file_path = '/Users/jonathan/Documents/Resources/{}.xml'.format(brick_name)
+        xml_file_path = '/Users/jonathan/Documents/Resources/Primitives/{}.xml'.format(brick_name)
         tree = ET.parse(xml_file_path)
         root = tree.getroot()
         annotations = root.find('Annotations')
@@ -654,7 +696,7 @@ class MyApp(ShowBase):
         for annotation in annotations.findall('Annotation'):
             if 'maingroupid' in annotation.attrib:
                 category_id = annotation.get('maingroupid')
-                print(f'Brick: {brick_name}, Category: {category_id}')
+                ###print(f'Brick: {brick_name}, Category: {category_id}')
                 return category_id
         print(f'Warning: No maingroupid attribute found in any Annotation tag in {xml_file_path}')
         return None
@@ -671,12 +713,13 @@ class MyApp(ShowBase):
 
         self.model = self.loader.loadModel(model_path)
         self.model.reparentTo(self.render)
-        self.model.setScale(21, 21, 21)  # adjust this as necessary
+        self.model.setScale(28, 28, 28)  # adjust this as necessary
         #self.model.setPos(pos + Vec3(0, 0, 1))  # slightly above the plane to prevent Z-fighting
         self.model.setP(90)
+        
     def calculate_slot_position(self, slot):
-        x_pos = -0.17 + (slot % 3) * 0.17  # Adjust as necessary
-        y_pos = 2.85 - (slot // 3) * 0.20  # Adjust as necessary
+        x_pos = -0.20 + ((slot-1) % 3) * 0.2  # Adjust as necessary
+        y_pos = 2.85 - ((slot-1) // 3) * 0.25  # Adjust as necessary
         return (x_pos, y_pos)
 
     def scroll_up(self, event=None):
@@ -689,16 +732,17 @@ class MyApp(ShowBase):
             # Decrease the vertical scroll value by some increment, e.g., 0.1
             self.frame['verticalScroll_value'] = max(self.frame['verticalScroll_value'] - 0.1, 0)
 
-
     def create_gui(self):
         # Create the scrolled frame
         self.frame = DirectScrolledFrame(
             parent=self.aspect2d,
             pos=(-1, 0, 0),
-            frameSize=(-0.3, 0.3, -1, 1),
-            canvasSize=(-0.3, 0.3, -3, 3),
+            frameSize=(-0.3, 0.35, -1, .8),
+            canvasSize=(-0.3, 0.3, -0.3, 3),
             scrollBarWidth=0.04,
             verticalScroll_relief=DGG.SUNKEN,
+            verticalScroll_frameColor=(0.5, 0.5, 0.5, 1),  # grey color for vertical scrollbar
+            horizontalScroll_frameColor=(0.5, 0.5, 0.5, 1),  # grey color for horizontal scrollbar
         )
         
 
@@ -713,33 +757,62 @@ class MyApp(ShowBase):
         )
         brick_images_file_paths = sorted(brick_images_file_paths)
         num_bricks = len(brick_images_file_paths)
+
+        self.button_slots = {}
         
         # Get a set of all category ids.
         category_ids = {self.get_category_id(os.path.basename(brick_image).split('.')[0]) for brick_image in brick_images_file_paths}
-        
+
         # Initialize the categories dictionary.
         categories = {category_id: [] for category_id in category_ids}
 
+        categories_copy = categories.copy()
+
+        categories = {}
+
+        
+        # Create an empty ordered dictionary
+
+        ordered_categories = collections.OrderedDict()
+
+        # List of category ids in the order you want them to appear
+        order = [201, 203, 202, 204, 205, 206, 207, 215, 217, 216, 277, 225, 265, 292, 301, 315, 385, 288, 312, 196, 218, 341, 353, 227, 272, 273, 274, 286, 240, 242, 243, 244, 245, 252, 251, 249, 259, 101]
+
+        # Fill your dictionary in the required order
+        for category_id in order:
+            ordered_categories[str(category_id)] = categories.get(str(category_id), [])
+
+        categories = ordered_categories
+
+
+
         # Create category buttons and assign to dictionary
-# Create category buttons and assign to dictionary
-        for j, category_id in enumerate(categories.keys()):
+        for category_id, brick_names in ordered_categories.items():
+            if str(category_id) in ['290', '391', '291', '208', '226', '228', '235', '236', '281', '285', '296', '250', '246', '247', '253', '255', '559', '266', '268', '366', '267', '368', '367', '396', '275', '276', '375', '376', '287', '387', '388', '293', '392', '393', '310', '381', '320', '313', '340', '342', '347', '350', '351', '352', '359', '302', '386', '311', '321', '372', '107', '115', '128', '199']:
+                continue
             x_pos, y_pos = self.calculate_slot_position(self.category_slot)
             category_button_pos = (x_pos, 0, y_pos)
-            self.category_slot += 1
-
             category_button_image_path = '/Users/jonathan/Documents/Resources/MainGroupDividers/{}.png'.format(category_id)
             if category_id not in self.category_buttons:
                 self.category_buttons[category_id] = []
             
-            self.category_buttons[category_id] = DirectButton(
+            self.category_buttons[category_id] = [DirectButton(
                 parent=self.frame.getCanvas(),
                 pos=category_button_pos,
                 scale=0.08,  # Adjust as necessary
                 command=self.expand_category,
                 extraArgs=[category_id],
                 image=category_button_image_path # Set the button image
-            )
+            )]
 
+            self.button_slots[category_id] = self.category_slot
+
+            self.category_slot += 1
+            #print(category_id, self.category_slot)
+
+
+
+        
         # Create brick buttons and assign to dictionary
         for i in range(num_bricks):
             brick_image = brick_images_file_paths[i]
@@ -749,38 +822,122 @@ class MyApp(ShowBase):
             if category_id not in self.category_buttons:
                 self.category_buttons[category_id] = []
 
+            if str(category_id) == '250':  # if category_id is 250, change it to 244
+                category_id = '244'
+            elif str(category_id) in ['228', '235', '236', '281', '285', '296']:
+                category_id = '227'
+            elif str(category_id) in ['290', '391', '291']:
+                category_id = '196'
+            elif str(category_id) == '208':
+                category_id = '206'
+            elif str(category_id) == '226':
+                category_id = '225'
+            elif str(category_id) in ['246', '247']:
+                category_id = '251'
+            elif str(category_id) in ['253', '255']:
+                category_id = '252'
+            elif str(category_id) == '559':
+                category_id = '259'
+            elif str(category_id) in ['266', '268', '366', '267', '368', '367', '396']:
+                category_id = '265'
+            elif str(category_id) in ['275', '276', '375', '376']:
+                category_id = '272'
+            elif str(category_id) in ['287', '387', '388']:
+                category_id = '288'
+            elif str(category_id) in ['293', '392', '393']:
+                category_id = '292'
+            elif str(category_id) == '310':
+                category_id = '301'
+            elif str(category_id) == '381':
+                category_id = '312'
+            elif str(category_id) == '320':
+                category_id = '315'
+            elif str(category_id) in ['313', '340']:
+                category_id = '341'
+            elif str(category_id) in ['342', '347', '350', '351', '352', '359']:
+                category_id = '353'
+            elif str(category_id) in ['302', '386', '311', '321', '372']:
+                category_id = '385'
+            elif str(category_id) in ['107', '115', '128', '199']:
+                category_id = '101'
+
             model_path = self.brick_types[f'brick{i+1}']
             bricknum = i + 1
 
             x_pos, y_pos = self.calculate_slot_position(self.category_slot)
             brick_button_pos = (x_pos, 0, y_pos)
 
-            self.brick_buttons[brick_name] = DirectButton(
-                parent=self.frame.getCanvas(),
-                image=brick_image, 
-                pos=brick_button_pos,
-                scale=0.08,  # Adjust as necessary
-                command=self.set_brick_type,
-                extraArgs=["brick"+str(bricknum)],
-            )
+            brick_image = os.path.join(brick_images_folder_path, brick_name + ".png")
+            brick_geometry = os.path.join(self.brick_geom_folder_path, brick_name + ".obj")
+
+
+            if os.path.isfile(brick_geometry):
+                    if os.path.isfile(brick_image):
+                        # Create button with image
+                        self.brick_buttons[brick_name] = DirectButton(
+                            parent=self.frame.getCanvas(),
+                            image=brick_image, 
+                            pos=brick_button_pos,
+                            scale=0.08,  # Adjust as necessary
+                            command=self.set_brick_type,
+                            extraArgs=["brick"+str(bricknum)],
+                        )
+                    else:
+                        # Create button with text (brick_name)
+                        self.brick_buttons[brick_name] = DirectButton(
+                            parent=self.frame.getCanvas(),
+                            text=brick_name, 
+                            pos=brick_button_pos,
+                            command=self.set_brick_type,
+                            extraArgs=["brick"+str(bricknum)],
+                        )
+            else:
+                    print(f"No geometry file found for {brick_name}")
+
+                    
             self.brick_buttons[brick_name].hide()
             categories[category_id].append(brick_name)
 
+
+            self.cat_buttons = self.category_buttons
+
             self.category_buttons[category_id] = self.brick_buttons[brick_name] # assign the created button to the dictionary
+            self.button_slots[brick_name] = self.category_slot
+
+            self.category_slot += 1
+            ###print(self.category_slot, f'Brick: {brick_name}')
+
 
         self.categories = categories
         self.category_visibility = {category_id: False for category_id in category_ids}
 
 
+    def move_category_button(self, category_id, direction):
+        total_buttons = self.category_slot
+        new_slot_start = self.button_slots[category_id] + 1
+
+        for brick_name in self.categories[category_id]:
+            new_xpos = -0.2 + ((new_slot_start-1) % 3) * 0.2
+            new_ypos = 2.85 - ((new_slot_start-1) // 3) * 0.25
+            button = self.brick_buttons[brick_name]
+            button.setPos(new_xpos, 0, new_ypos)
+            new_slot_start += 1
+
+        brick_cat_count = len(self.categories[category_id])
+        brick_offput_slot = self.button_slots[category_id] + brick_cat_count + 1
+        ###print(self.button_slots[category_id], new_slot_start, brick_cat_count, ",", brick_offput_slot)
+
+        #for brick_name not in self.categories[category_id]:
+            
 
 
     def expand_category(self, category_id):
+        #self.category_slot = 0
         buttons = self.category_buttons[category_id]
         if self.category_visibility[category_id]: # If category is currently expanded
             # Hide brick buttons
             for brick_name in self.categories[category_id]:
                 self.brick_buttons[brick_name].hide()
-
             # Move down category buttons
             for other_category_id in list(self.categories.keys())[self.category_slot:]:
                 self.move_category_button(other_category_id, "down")
@@ -790,14 +947,23 @@ class MyApp(ShowBase):
         else: # If category is currently collapsed
             # Show brick buttons
             for i, brick_name in enumerate(self.categories[category_id]):
+                self.move_category_button(category_id, "down")
                 self.brick_buttons[brick_name].show()
-            
+            #print(self.cat_buttons[category_id])
             # Move up category buttons
-            for other_category_id in list(self.categories.keys())[self.category_slot + 1:]:
-                self.move_category_button(other_category_id, "up", len(self.categories[category_id]))
+            #for i, category_id in enumerate(self.cat_buttons[category_id]):
+                
+                #print (self.categories[category_id],"hey")
+                #self.move_category_button(other_category_id, "up", len(self.categories[category_id]))
 
             # Update category visibility
             self.category_visibility[category_id] = True
+
+    def set_cursor_image(self, image_path):
+        wp = WindowProperties()
+        wp.setCursorFilename(image_path)
+        base.win.requestProperties(wp)
+
             
     def render_model_to_texture(self, model_path, texture):
         # Create an off-screen buffer
@@ -1003,6 +1169,10 @@ class MyApp(ShowBase):
                 child.removeNode()
             print("flexing!")
 
+        elif self.mode == 'DELETE':
+            for child in self.toolbar_options.getChildren():
+                child.removeNode()
+
         else:
             print("No mode selected!")
         
@@ -1051,6 +1221,7 @@ class MyApp(ShowBase):
     def paint_mode(self):
         self.mode = 'PAINT'
         self.add_toolbar_options()
+        self.set_cursor_image('/Users/jonathan/Documents/Resources/202.png')
 
     def clone_mode(self):
         return
@@ -1059,7 +1230,8 @@ class MyApp(ShowBase):
             return
 
     def delete_mode(self):
-            return
+        self.mode = 'DELETE'
+        self.add_toolbar_options()
         
     def hingealign_mode(self):
             return
@@ -1081,7 +1253,7 @@ class MyApp(ShowBase):
 
     def select_model(self):
         # Check if mouse is in screen
-        if self.mouseWatcherNode.hasMouse():
+        #if self.mouseWatcherNode.hasMouse():
             # Get the mouse position
             mouse_pos = self.mouseWatcherNode.getMouse()
             # Set the position of the ray based on the mouse position
@@ -1096,6 +1268,7 @@ class MyApp(ShowBase):
                 self.picked_obj = self.pq.getEntry(0).getIntoNodePath()
                 # Change the color of the picked model
                 self.picked_obj.setColor(0, 0, 1, 1)  # RGB alpha: blue color
+                self.selected = True
     
     
 app = MyApp()
