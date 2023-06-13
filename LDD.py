@@ -22,7 +22,16 @@ import xml.etree.ElementTree as ET
 import math
 from panda3d.core import WindowProperties
 import collections
-from panda3d.core import PointLight
+from panda3d.core import PointLight, PerspectiveLens
+from panda3d.core import TexturePool
+from panda3d.core import load_prc_file_data
+from panda3d.core import DirectionalLight
+from panda3d.core import AmbientLight, DirectionalLight, Point3
+
+
+
+
+
 
 
 
@@ -33,11 +42,87 @@ def hex_to_rgb(hex):
     return r/255, g/255, b/255, 1 # Normalize to 0-1 range and return as RGBA
 class MyApp(ShowBase):
 
+
     
     def __init__(self):
         ShowBase.__init__(self)
-        # self.disableMouse()
+        self.brick_geom_folder_path = '/Users/jonathan/Documents/Resources/brick_geometry'  # Replace with the actual folder path
 
+
+        
+
+        self.brick_files = [
+            os.path.join(self.brick_geom_folder_path, file)
+            for file in os.listdir(self.brick_geom_folder_path)
+            if os.path.isfile(os.path.join(self.brick_geom_folder_path, file)) and file != '.DS_Store'
+        ]
+        
+        self.brick_files = sorted(self.brick_files)
+
+        self.brick_types = {}
+        for i, brick_file in enumerate(self.brick_files, start=1):
+            self.brick_types[f'brick{i}'] = brick_file
+
+
+        self.selectMove = False
+
+        self.accept('mouse1', self.on_left_click)  # Left click
+        self.hover_text = None
+        self.hover_text_frame = None
+        self.taskMgr.add(self.update_model_position, "update_model_position")
+        self.taskMgr.add(self.check_mouse, "check_mouse")
+        self.mousewatch = False
+        self.picked_obj = None
+        self.accept('b', self.toggle_color_selection_window)
+        self.create_color_selection_window()
+        self.taskMgr.add(self.check_mouse_position, 'check_mouse_position')
+        self.current_tool = None
+
+        self.accept('mouse3', self.start_orbit_drag)
+        self.accept('mouse3-up', self.stop_orbit_drag)
+        self.accept('shift-mouse3', self.start_drag)
+        self.accept('shift-mouse3-up', self.stop_drag)
+        self.taskMgr.add(self.pan_task, 'pan_task')
+        self.taskMgr.add(self.orbit_task, 'orbit_task')
+        self.is_dragging = False
+        self.last_mouse_pos = None
+        self.delta = None
+        self.selected_color = None
+        self.last_mouse_pos = None
+        self.curr_mouse_pos = None
+        self.dx = None
+        self.dy = None
+        self.taskMgr.add(self.update, 'update')
+        self.taskMgr.add(self.orbit_update, 'orbit_update')
+        self.dragged = False
+        self.is_orbit_dragging = False
+        self.shown_buttons_count = {}
+        self.category_buttons = {}
+
+        
+        # Initialize button dictionaries
+        self.brick_buttons = {}
+        self.cat_buttons = {}
+
+        # Initialize slot positions
+        self.category_slot = 1
+        self.brick_slot = {}
+        self.brick_slot = 1
+        self.create_gui()
+        self.create_navigation_buttons()
+        self.mouse_on_frame = False
+        self.mode = None
+
+
+        # Load an image as a texture
+        #self.loading_image = TexturePool.loadTexture('/Users/jonathan/Documents/Resources/LDD Splash Screen.png')
+
+        # Create a card to display the texture
+        #card_maker = CardMaker('loading_screen')
+        #card_maker.set_frame(-1, 1, -1, 1)  # cover the entire screen
+        #card = self.render2d.attach_new_node(card_maker.generate())
+        #card.setTexture(self.loading_image)
+        
         # Set camera position and orientation
         self.camera.setPos(764, -650, 890)
         self.camera.setHpr(30, -30, 0)
@@ -53,20 +138,6 @@ class MyApp(ShowBase):
         self.plnp.setPos (764, -650, 890)
 
 
-        self.brick_geom_folder_path = '/Users/jonathan/Documents/Resources/brick_geometry'  # Replace with the actual folder path
-
-        self.brick_files = [
-            os.path.join(self.brick_geom_folder_path, file)
-            for file in os.listdir(self.brick_geom_folder_path)
-            if os.path.isfile(os.path.join(self.brick_geom_folder_path, file)) and file != '.DS_Store'
-        ]
-        
-        self.brick_files = sorted(self.brick_files)
-
-
-        self.brick_types = {}
-        for i, brick_file in enumerate(self.brick_files, start=1):
-            self.brick_types[f'brick{i}'] = brick_file
 
         # Create a plane at z=0
         self.plane = Plane(Vec3(0, 0, 1), Point3(0, 0, 0))
@@ -155,58 +226,63 @@ class MyApp(ShowBase):
 
        # self.mode = 'PLACE'  # Set default mode to 'PLACE'
 
-        self.selectMove = False
 
-        self.accept('mouse1', self.on_left_click)  # Left click
-        self.hover_text = None
-        self.hover_text_frame = None
-        self.taskMgr.add(self.update_model_position, "update_model_position")
-        self.taskMgr.add(self.check_mouse, "check_mouse")
-        self.mousewatch = False
-        self.picked_obj = None
-        self.accept('b', self.toggle_color_selection_window)
-        self.create_color_selection_window()
-        self.taskMgr.add(self.check_mouse_position, 'check_mouse_position')
-        self.current_tool = None
-
-        self.accept('mouse3', self.start_orbit_drag)
-        self.accept('mouse3-up', self.stop_orbit_drag)
-        self.accept('shift-mouse3', self.start_drag)
-        self.accept('shift-mouse3-up', self.stop_drag)
-        self.taskMgr.add(self.pan_task, 'pan_task')
-        self.taskMgr.add(self.orbit_task, 'orbit_task')
-        self.is_dragging = False
-        self.last_mouse_pos = None
-        self.delta = None
-        self.selected_color = None
-        self.last_mouse_pos = None
-        self.curr_mouse_pos = None
-        self.dx = None
-        self.dy = None
-        self.taskMgr.add(self.update, 'update')
-        self.taskMgr.add(self.orbit_update, 'orbit_update')
-        self.dragged = False
-        self.is_orbit_dragging = False
-        self.shown_buttons_count = {}
-        self.category_buttons = {}
-
+    def render_obj_to_texture(self, obj_path, card):
+        # Load the model
+        model = loader.loadModel(obj_path)
+        print(model)    
+        model.setColorScale(0.5, 0, 0.5, 1)
         
-        # Initialize button dictionaries
-        self.brick_buttons = {}
-        self.cat_buttons = {}
+        min_point, max_point = model.get_tight_bounds()
+        center_point = (min_point + max_point) / 2
 
-        # Initialize slot positions
-        self.category_slot = 1
-        self.brick_slot = {}
-        self.brick_slot = 1
-        self.create_gui()
-        self.create_navigation_buttons()
-        self.mouse_on_frame = False
-        #self.accept('wheel_up', self.scroll_up)
-        #self.accept('wheel_down', self.scroll_down)
-        #self.frame.bind(DGG.ENTER, self.on_mouse_enter_frame)
-        #self.frame.bind(DGG.EXIT, self.on_mouse_exit_frame)
-        self.mode = None
+        # Create an offscreen buffer
+        buffer = self.win.make_texture_buffer('renderBuffer', 512, 512)
+        buffer.set_sort(-100)  # This buffer should be rendered before the main window
+
+        # Set up a display region and a camera for the buffer
+        display_region = buffer.make_display_region()
+        offscreen_camera = self.make_camera(buffer)
+        offscreen_camera.node().get_lens().set_near_far(1, (max_point - min_point).length() * 2)
+
+        # Add a point light to the offscreen camera
+        light = PointLight('pointLight')
+        light_node = offscreen_camera.attach_new_node(light)
+        light_node.set_pos(center_point + Point3(0, 0, 10))  # Adjust light position as necessary
+        model.set_light(light_node)
+
+
+
+        # Clear the buffer's display region before rendering
+        display_region.set_clear_color_active(True)
+        display_region.set_clear_depth_active(True)
+        display_region.set_clear_color((1, 1, 1, 1))  # Clear to white
+
+        # Reparent the model to the render, not to the camera
+        model.reparent_to(self.render)
+        #offscreen_camera.setHpr(30, -30, 0)
+
+
+        # Move the offscreen camera back a bit so that it can see the model
+        dy = max_point.y - min_point.y
+        offscreen_camera.set_pos(center_point + Point3(0, -2 * dy, 0))  # Adjust this factor as needed
+        offscreen_camera.look_at(center_point+ Point3(0,0,-.5))
+        model.setHpr(30, 90, -60)  # Rotate 180 degrees on the Z-axis and 90 degrees on the X-axis
+
+
+        # Render the scene and grab the image to the texture
+        self.graphicsEngine.render_frame()
+        buffer.save_screenshot('debug.png')
+
+        # Set the buffer's texture to the Card
+        card.setTexture(buffer.get_texture())
+
+        # Clean up
+        model.remove_node()
+        self.graphicsEngine.remove_window(buffer)
+
+    def clear_load_screen(self, card):
+        card.remove_node()
 
     def on_mouse_enter_frame(self, event):
         self.mouse_on_frame = True
@@ -465,7 +541,7 @@ class MyApp(ShowBase):
     def set_color(self, color):
         ###print("set color")
         self.selected_color = color
-        print(self.selected_color)
+        #print(self.selected_color)
 
     def toggle_color_selection_window(self):
         print("making colors")
@@ -733,6 +809,7 @@ class MyApp(ShowBase):
             self.frame['verticalScroll_value'] = max(self.frame['verticalScroll_value'] - 0.1, 0)
 
     def create_gui(self):
+
         # Create the scrolled frame
         self.frame = DirectScrolledFrame(
             parent=self.aspect2d,
@@ -755,9 +832,16 @@ class MyApp(ShowBase):
             for file in os.listdir(brick_images_folder_path)
             if os.path.isfile(os.path.join(brick_images_folder_path, file)) and file != '.DS_Store'
         )
-        brick_images_file_paths = sorted(brick_images_file_paths)
-        num_bricks = len(brick_images_file_paths)
 
+        brick_geom_files = [
+                file for file in os.listdir(self.brick_geom_folder_path) 
+                if file.endswith('.obj')
+            ]
+        
+        brick_images_file_paths = sorted(brick_images_file_paths)
+        num_bricks = len(brick_geom_files)
+        print(num_bricks, len(brick_images_file_paths))
+        
         self.button_slots = {}
         
         # Get a set of all category ids.
@@ -788,6 +872,9 @@ class MyApp(ShowBase):
 
         # Create category buttons and assign to dictionary
         for category_id, brick_names in ordered_categories.items():
+
+
+            
             if str(category_id) in ['290', '391', '291', '208', '226', '228', '235', '236', '281', '285', '296', '250', '246', '247', '253', '255', '559', '266', '268', '366', '267', '368', '367', '396', '275', '276', '375', '376', '287', '387', '388', '293', '392', '393', '310', '381', '320', '313', '340', '342', '347', '350', '351', '352', '359', '302', '386', '311', '321', '372', '107', '115', '128', '199']:
                 continue
             x_pos, y_pos = self.calculate_slot_position(self.category_slot)
@@ -815,8 +902,10 @@ class MyApp(ShowBase):
         
         # Create brick buttons and assign to dictionary
         for i in range(num_bricks):
-            brick_image = brick_images_file_paths[i]
-            brick_name = os.path.basename(brick_image).split('.')[0]
+            brick_geom_files = sorted(brick_geom_files)
+            brick_geom = brick_geom_files[i]
+  
+            brick_name = os.path.basename(brick_geom).split('.')[0]
             category_id = self.get_category_id(brick_name)
 
             if category_id not in self.category_buttons:
@@ -826,7 +915,7 @@ class MyApp(ShowBase):
                 category_id = '244'
             elif str(category_id) in ['228', '235', '236', '281', '285', '296']:
                 category_id = '227'
-            elif str(category_id) in ['290', '391', '291']:
+            elif str(category_id) in ['290', '391', '291', '299', '399', '0']: #change this 299 later
                 category_id = '196'
             elif str(category_id) == '208':
                 category_id = '206'
@@ -867,30 +956,50 @@ class MyApp(ShowBase):
             x_pos, y_pos = self.calculate_slot_position(self.category_slot)
             brick_button_pos = (x_pos, 0, y_pos)
 
-            brick_image = os.path.join(brick_images_folder_path, brick_name + ".png")
+            #brick_image = os.path.join(brick_images_folder_path, brick_name + ".png")
             brick_geometry = os.path.join(self.brick_geom_folder_path, brick_name + ".obj")
 
+            card_maker = CardMaker('card')
+            card_maker.set_frame(-0.5, 0.5, -0.5, 0.5)  # Set size and position
+            card = NodePath(card_maker.generate())
+            card.reparent_to(self.aspect2d)  # Add it to the 2D scene graph
+            card.hide()
 
-            if os.path.isfile(brick_geometry):
-                    if os.path.isfile(brick_image):
-                        # Create button with image
-                        self.brick_buttons[brick_name] = DirectButton(
+            # Set the texture
+            self.render_obj_to_texture(brick_geometry, card)
+            
+
+
+ 
+            
+            if i+1 < len(brick_images_file_paths) and brick_images_file_paths[i] is not None:
+                    brick_image = brick_images_file_paths[i]
+
+                
+                    # Create button with image
+                    self.brick_buttons[brick_name] = DirectButton(
                             parent=self.frame.getCanvas(),
-                            image=brick_image, 
+                            image=card.get_texture(),  
                             pos=brick_button_pos,
                             scale=0.08,  # Adjust as necessary
                             command=self.set_brick_type,
                             extraArgs=["brick"+str(bricknum)],
                         )
-                    else:
+                   # print(brick_name)
+                    #print(i)
+                        
+            elif i+1 >= len(brick_images_file_paths):
                         # Create button with text (brick_name)
                         self.brick_buttons[brick_name] = DirectButton(
                             parent=self.frame.getCanvas(),
-                            text=brick_name, 
+                            text=brick_name,
+                            scale = 0.08,
                             pos=brick_button_pos,
                             command=self.set_brick_type,
                             extraArgs=["brick"+str(bricknum)],
                         )
+                       # print("text brick")
+                        #print(brick_name)
             else:
                     print(f"No geometry file found for {brick_name}")
 
@@ -905,7 +1014,7 @@ class MyApp(ShowBase):
             self.button_slots[brick_name] = self.category_slot
 
             self.category_slot += 1
-            ###print(self.category_slot, f'Brick: {brick_name}')
+            #print(self.category_slot, f'Brick: {brick_name}')
 
 
         self.categories = categories
@@ -964,45 +1073,6 @@ class MyApp(ShowBase):
         wp.setCursorFilename(image_path)
         base.win.requestProperties(wp)
 
-            
-    def render_model_to_texture(self, model_path, texture):
-        # Create an off-screen buffer
-        buffer = self.win.make_texture_buffer('buffer', 256, 256)
-       #buffer.set_clear_color(LColor(0, 0, 0, 0))  # Clear to transparent color
-        buffer.set_sort(-100)  # Render before the main window
-
-        # Create a display region and a camera
-        dr = buffer.make_display_region()
-        camera = self.makeCamera(buffer)
-        camera.node().set_lens(self.cam.node().get_lens())
-
-        # Create a new NodePath for the model to isolate it
-        model_parent = NodePath('model_parent')
-
-        # Load the model
-        model = self.loader.loadModel(model_path)
-        model.reparentTo(model_parent)
-
-        # Create a new BitMask
-        mask = BitMask32.bit(1)
-
-        # Set the camera mask
-        camera.node().set_camera_mask(mask)
-
-        # Show the model to this camera only
-        model_parent.show_through(mask)
-
-        # Reparent the model to the camera so it will be rendered to the buffer
-        model_parent.reparentTo(camera)
-
-        # Set the texture to the buffer
-        buffer.add_render_texture(texture, GraphicsOutput.RTMBindOrCopy, GraphicsOutput.RTPColor)
-
-        # Need to call this at least once to render the model to the texture
-        self.graphicsEngine.render_frame()
-        
-        # Clear (remove or detach nodes) the model_parent node after the texture generation
-        model_parent.remove_node()
 
 
 
